@@ -18,8 +18,16 @@ struct GPIOWrapper {
 	GPIOWrapper() : port(nullptr), number(0){}
 	GPIOWrapper(GPIO_TypeDef* port, uint16_t number) : port(port), number(number){}
 
-	void High(){ HAL_GPIO_WritePin(port, number, GPIO_PIN_SET); }
-	void Low(){ HAL_GPIO_WritePin(port, number, GPIO_PIN_RESET); }
+	void High()
+	{
+		if(port == nullptr) return;
+		HAL_GPIO_WritePin(port, number, GPIO_PIN_SET);
+	}
+	void Low()
+	{
+		if(port == nullptr) return;
+		HAL_GPIO_WritePin(port, number, GPIO_PIN_RESET);
+	}
 };
 
 

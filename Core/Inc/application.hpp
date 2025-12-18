@@ -10,7 +10,11 @@
 #include <spi_driver.hpp>
 #include <uart_driver.hpp>
 #include <string>
-#include <vector>
+#include <array>
+
+namespace app_constants {
+	constexpr size_t kMax = 4096;
+}
 
 class Application {
 private:
@@ -23,7 +27,8 @@ private:
 	SPIDriver spi_driver_;
 
 	// ADC record
-	std::vector<uint32_t> record_;
+	std::array<uint32_t, app_constants::kMax> record_;
+	size_t record_length_;
 
 	// Command Analysis
 	Tokens InputTokenizer(std::string);
