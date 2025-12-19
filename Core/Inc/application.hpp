@@ -27,6 +27,7 @@ private:
 	SPIDriver spi_driver_;
 
 	// ADC record
+	std::array<uint8_t, 3> buffer_;
 	std::array<uint32_t, app_constants::kMax> record_;
 	size_t record_length_;
 

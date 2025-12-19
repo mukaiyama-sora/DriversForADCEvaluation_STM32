@@ -16,3 +16,8 @@ void SPIDriver::RxInterruptCallback(SPI_HandleTypeDef* hspi)
 	++read_count_;
 	Deassert(GetCallbackPinIndex());
 }
+void SPIDriver::TxRxInterruptCallback(SPI_HandleTypeDef* hspi)
+{
+	++read_count_;
+	Deassert(GetCallbackPinIndex());
+}

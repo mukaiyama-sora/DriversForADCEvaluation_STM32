@@ -22,7 +22,7 @@ public:
 
 private:
 	void RxInterruptCallback(SPI_HandleTypeDef*) override;
-	void TxRxInterruptCallback(SPI_HandleTypeDef*) override {}
+	void TxRxInterruptCallback(SPI_HandleTypeDef*) override;
 };
 
 

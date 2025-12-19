@@ -22,7 +22,6 @@ Application app;
 extern "C" void application_init()
 {
 	app.Init();
-	UARTDriver::WriteLine("RESET");
 }
 extern "C" void application_run()
 {
@@ -35,6 +34,8 @@ void Application::Init()
 
 	spi_driver_.Init(&hspi1, {cs0, cs1});
 	UARTDriver::Init(&huart3);
+
+	buffer_.fill(0);
 }
 
 Application::Tokens Application::InputTokenizer(std::string s)
@@ -132,13 +133,15 @@ void Application::Radc(const Args& args)
 	SPIDriver::SetBufferSize(3);
 	SPIDriver::SetCallbackPinIndex(cs_constants::kADC);
 
+	std::array<uint8_t, 3> write;
+	write.fill(0);
+	SPIDriver::SetTxBuffer(write);
+
 	record_length_ = static_cast<size_t>(std::stol(args.front()));
 	if(record_length_ > app_constants::kMax) return;
 
 	HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 	while(SPIDriver::GetReadCount() < record_length_);
-
-	UARTDriver::WriteLine(std::to_string(SPIDriver::GetReadCount()));
 
 	for(size_t i = 0; i < record_length_; ++i) {
 		UARTDriver::WriteLine(std::bitset<32>(record_[i]).to_string());
@@ -149,15 +152,15 @@ extern "C" void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if(SPIDriver::GetSPIState() != HAL_SPI_STATE_READY) return;
 	if(const size_t count = SPIDriver::GetReadCount(); count == 0)
 	{
-		app.spi_driver_.ReadIT();
+		app.spi_driver_.ReadWriteIT();
 	}
 	else if(count != 0 && (count - 1) < app.record_length_) {
-		const auto& buffer = std::vector<uint8_t>(SPIDriver::GetBuffer().begin(), SPIDriver::GetBuffer().end());
+		std::copy(SPIDriver::GetBuffer().begin(), SPIDriver::GetBuffer().end(), app.buffer_.begin());
 		const auto data =
-			(static_cast<uint32_t>(buffer.at(0)) << 16) |
-			(static_cast<uint32_t>(buffer.at(1)) << 8)	| static_cast<uint32_t>(buffer.at(2));
+			(static_cast<uint32_t>(app.buffer_[0]) << 16) |
+			(static_cast<uint32_t>(app.buffer_[1]) << 8)	| static_cast<uint32_t>(app.buffer_[2]);
 		app.record_.at(count - 1) = data;
-		app.spi_driver_.ReadIT();
+		app.spi_driver_.ReadWriteIT();
 	}
 	else {
 		HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
