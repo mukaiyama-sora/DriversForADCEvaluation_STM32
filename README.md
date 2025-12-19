@@ -1,6 +1,8 @@
 # STM32 UART/SPI Driver
 # ***UARTDriver***
 
+必要なファイル: `uart_driver.hpp`, `uart_driver.cpp`
+
 基本的なUART通信を行うためのC++ラッパ。
 インスタンス作成は禁止されているので`UARTDriver::xxx`の形で使用する。
 利用可能なのは以下の3つ。
@@ -29,6 +31,9 @@ UARTDriver::WriteLine(std::bitset<16>(123).to_string())  //0000000001111011
 改行文字(LF)までを読み、`std::string`にして返す。
 
 # ***SPIDriverBase***
+
+必要なファイル: `gpio_wrapper.hpp`, `spi_driver_base.hpp`, `spi_driver_base.cpp`
+
 - **単一インスタンスで運用する必要がある(2つ以上のSPIハンドラは持てない)。**
 - **`SPIDriverBase`は抽象クラスなので、派生クラスで仮想関数(コールバック関数)をオーバーライドする必要がある。**
 - **`std::span`を使用しているのでC++20以上である必要がある**
@@ -56,7 +61,7 @@ UARTDriver::WriteLine(std::bitset<16>(123).to_string())  //0000000001111011
 SPIドライバを引数で指定した**SPIのハンドラ**と**CSピンのベクタ**初期化する。
 `GPIOWrapper`は第一引数にPort, 第二引数にNumberを指定することで初期化できる。
     
-```cpp:
+```cpp
 SPIDriver spi_driver;
 GPIOWrapper cs0(GPIOD, GPIO_PIN_14), cs1(GPIOF, GPIO_PIN_12);
 spi_driver.Init(&hspi1, {cs0, cs1});
