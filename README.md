@@ -202,4 +202,201 @@ private:
 	void TxRxInterruptCallback(SPI_HandleTypeDef*) override {}
 };
 ```
+# 使用例
 
+`SPIDriverBase`を継承して`SPIDriver`を作り、コールバック関数を実装する。
+<details><summary><code>spi_driver.hpp</code></summary>
+	
+```cpp
+#ifndef INC_SPI_DRIVER_HPP_
+#define INC_SPI_DRIVER_HPP_
+
+#include <atomic>
+#include <spi_driver_base.hpp>
+
+class SPIDriver : public SPIDriverBase {
+private:
+	static std::atomic<size_t> read_count_;
+
+public:
+	SPIDriver() = default;
+
+	static void InitReadCount();
+	static const size_t GetReadCount();
+
+private:
+	void RxInterruptCallback(SPI_HandleTypeDef*) override;
+	void TxRxInterruptCallback(SPI_HandleTypeDef*) override;
+};
+#endif /* INC_SPI_DRIVER_HPP_ */
+```
+</details>
+<details><summary><code>spi_driver.cpp</code></summary>
+
+```cpp
+#include <spi_driver.hpp>
+
+std::atomic<size_t> SPIDriver::read_count_{0};
+
+void SPIDriver::InitReadCount() { read_count_.store(0); }
+const size_t SPIDriver::GetReadCount() { return read_count_.load(); }
+
+void SPIDriver::RxInterruptCallback(SPI_HandleTypeDef* hspi)
+{
+	++read_count_;
+	Deassert(GetCallbackPinIndex());
+}
+void SPIDriver::TxRxInterruptCallback(SPI_HandleTypeDef* hspi)
+{
+	++read_count_;
+	Deassert(GetCallbackPinIndex());
+}
+```
+
+</details>
+
+アプリケーション用のクラスに変数として実装する。
+
+<details><summary><code>application.hpp</code>(一部)</summary>
+
+```cpp
+
+// ...
+// ...
+
+class Application {
+private:
+	// ...
+	// ...
+
+	// SPI Driver
+	SPIDriver spi_driver_;
+
+	// ...
+	// ...
+
+	// Command Declaration
+	void Wreg(const Args&);
+	void Rreg(const Args&);
+	void Radc(const Args&);
+
+	friend void HAL_GPIO_EXTI_Callback(uint16_t);
+
+public:
+	void Init();
+
+	// ...
+	// ...
+};
+
+// ...
+// ...
+
+```
+</details>
+
+<details><summary><code>application.cpp</code>(一部)</summary>
+
+```cpp
+
+// ...
+// ...
+
+Application app;
+
+void Application::Init()
+{
+	GPIOWrapper cs0(GPIOD, GPIO_PIN_14),  cs1(GPIOF, GPIO_PIN_12);
+
+	spi_driver_.Init(&hspi1, {cs0, cs1});
+	UARTDriver::Init(&huart3);
+
+	buffer_.fill(0);
+}
+
+void Application::Wreg(const Args& args)
+{
+	// ...
+ 	// ...
+
+	std::array<std::array<uint8_t, 8>, 3> cast;
+
+	// ...
+	// ...
+
+	std::array<uint8_t, 5> tmp;
+	for(size_t i = 0; i < 3; ++i)
+	{
+		std::copy_n(cast.at(i).begin() + 3, 5, tmp.begin());
+		spi_driver_.Write<5>(tmp, cs_constants::kReg);
+	}
+	UARTDriver::WriteLine("WREG OK");
+}
+
+void Application::Rreg(const Args& args)
+{
+	// ...
+	// ...
+
+	std::array<uint8_t, 5> write;
+
+	// ...
+	// ...
+
+	SPIDriver::SetTxBuffer(std::vector<uint8_t>(write.begin(), write.end()));
+	spi_driver_.ReadWrite(cs_constants::kReg);
+
+	uint64_t out = 0;
+	uint64_t shift = 32;
+	for(const auto& reg : SPIDriver::GetBuffer()) {
+		out 	|= (static_cast<uint64_t>(reg) << shift);
+		shift 	-= 8;
+	}
+
+	UARTDriver::WriteLine(std::bitset<40>(out).to_string());
+}
+
+void Application::Radc(const Args& args)
+{
+	if(args.size() != 1) return;
+
+	SPIDriver::InitReadCount();
+	SPIDriver::SetBufferSize(3);
+	SPIDriver::SetCallbackPinIndex(cs_constants::kADC);
+
+	std::array<uint8_t, 3> write;
+	write.fill(0);
+	SPIDriver::SetTxBuffer(write);
+
+	record_length_ = static_cast<size_t>(std::stol(args.front()));
+	if(record_length_ > app_constants::kMax) return;
+
+	HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+	while(SPIDriver::GetReadCount() < record_length_);
+
+	for(size_t i = 0; i < record_length_; ++i) {
+		UARTDriver::WriteLine(std::bitset<32>(record_[i]).to_string());
+	}
+}
+
+extern "C" void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+	if(SPIDriver::GetSPIState() != HAL_SPI_STATE_READY) return;
+	if(const size_t count = SPIDriver::GetReadCount(); count == 0)
+	{
+		app.spi_driver_.ReadWriteIT();
+	}
+	else if(count != 0 && (count - 1) < app.record_length_) {
+		std::copy(SPIDriver::GetBuffer().begin(), SPIDriver::GetBuffer().end(), app.buffer_.begin());
+		const auto data =
+			(static_cast<uint32_t>(app.buffer_[0]) << 16) |
+			(static_cast<uint32_t>(app.buffer_[1]) << 8)	| static_cast<uint32_t>(app.buffer_[2]);
+		app.record_.at(count - 1) = data;
+		app.spi_driver_.ReadWriteIT();
+	}
+	else {
+		HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
+	}
+}
+
+```
+</details>
